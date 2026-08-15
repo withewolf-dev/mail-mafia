@@ -1,0 +1,26 @@
+# env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+
+# node
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# local data — never commit harvested prospects or reply dumps
+data/
+*.local.json
+*.csv
+
+# os / editor
+.DS_Store
+.vscode/
+.idea/

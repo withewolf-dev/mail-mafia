@@ -1,0 +1,467 @@
+{
+  "name": "Armstrong — Inbox + Reply Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## PHASE 4 — INBOX MONITOR\nRuns every 30 min. Pulls unread replies,\nlooks up the prospect for context,\nclassifies intent with Claude.\n\nConfidence < 0.8 is forced to UNCLEAR\nso ambiguous replies never auto-send.",
+        "height": 320,
+        "width": 420,
+        "color": 3
+      },
+      "id": "n1",
+      "name": "Note Phase 4",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-620, -160]
+    },
+    {
+      "parameters": {
+        "content": "## PHASE 5 — ROUTING\nINTERESTED / SEND_REPORT auto-reply.\nOBJECTION drafts + posts to Slack for approval.\nUNCLEAR is Slack only, never auto.\nNOT_INTERESTED suppresses the whole domain.\nOOO requeues +14d silently.",
+        "height": 340,
+        "width": 520,
+        "color": 7
+      },
+      "id": "n2",
+      "name": "Note Phase 5",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [600, -180]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "t1",
+      "name": "Every 30 Min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-600, 220]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 25,
+        "simple": false,
+        "filters": {
+          "q": "is:unread -in:sent newer_than:2d"
+        },
+        "options": {}
+      },
+      "id": "g1",
+      "name": "Get Unread Replies",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [-380, 220],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "l1",
+      "name": "Loop Replies",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-160, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = $input.first().json;\n\nconst headers = {};\nfor (const h of (m.payload?.headers || [])) headers[h.name.toLowerCase()] = h.value;\n\nconst from = headers['from'] || m.From || '';\nconst emailMatch = from.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/);\nconst email = emailMatch ? emailMatch[0].toLowerCase() : '';\nconst domain = email.split('@')[1] || '';\n\nlet body = m.text || m.snippet || '';\nif (!body && m.html) body = String(m.html).replace(/<[^>]+>/g, ' ');\n\n// strip the quoted original so the classifier only sees THEIR words\nbody = String(body)\n  .split(/\\n>|On .* wrote:|-----Original Message-----|________________________________/)[0]\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .slice(0, 2000);\n\nreturn [{ json: {\n  messageId: m.id,\n  threadId: m.threadId,\n  email,\n  domain,\n  from,\n  subject: headers['subject'] || '',\n  reply_text: body\n}}];"
+      },
+      "id": "c1",
+      "name": "Parse Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [60, 220]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE_AIRTABLE_BASE_ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Prospects",
+          "mode": "name"
+        },
+        "filterByFormula": "={{ \"{email}='\" + $json.email + \"'\" }}",
+        "limit": 1,
+        "options": {}
+      },
+      "id": "a1",
+      "name": "Lookup Prospect",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [280, 220],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $('Parse Reply').first().json;\nconst hit = $input.first().json || {};\nconst p = hit.fields || hit || {};\n\nconst system = `You classify replies to B2B cold outreach for Armstrong, an AI-search visibility service.\nReturn ONLY valid JSON. No markdown fences. No preamble.\nSchema: {\"intent\": string, \"objection_type\": string|null, \"confidence\": number, \"suggested_reply\": string}\n\nintent must be exactly one of:\nINTERESTED - wants a call, a demo, or says yes\nSEND_REPORT - wants the free visibility report but not a call yet\nOBJECTION - engaged but pushing back (price, timing, already have an agency, trust)\nREFERRAL - forwarding to someone else or naming another contact\nOOO - auto-reply, out of office, on leave\nNOT_INTERESTED - clear no, unsubscribe, stop emailing\nUNCLEAR - anything else\n\nHARD RULE: if confidence < 0.8, intent MUST be UNCLEAR.\nsuggested_reply: max 60 words, plain, no exclamation marks, no emoji. Sign off as Danish.`;\n\nconst user = `PROSPECT: ${p.name || 'unknown'} (${p.category || '?'}, ${p.city || '?'})\\nWE SENT: ${p.subject || '(unknown subject)'}\\n\\nTHEIR REPLY:\\n${r.reply_text}`;\n\nreturn [{ json: { ...r, prospect_name: p.name || '', place_id: p.place_id || '', payload: {\n  model: 'claude-haiku-4-5-20251001',\n  max_tokens: 500,\n  system,\n  messages: [{ role: 'user', content: user }]\n}}}];"
+      },
+      "id": "c2",
+      "name": "Build Classify Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": {}
+      },
+      "id": "h1",
+      "name": "Claude — Classify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 220],
+      "notes": "Header Auth credential: name=x-api-key value=<anthropic key>",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Build Classify Payload').first().json;\nconst raw = $input.first().json;\n\nlet out = { intent: 'UNCLEAR', objection_type: null, confidence: 0, suggested_reply: '' };\ntry {\n  const txt = (raw.content || []).filter(b => b.type === 'text').map(b => b.text).join('');\n  out = JSON.parse(txt.replace(/```json|```/g, '').trim());\n} catch (e) {\n  out.parse_error = String(e);\n}\n\n// belt and braces: enforce the confidence floor in code, not just in the prompt\nif ((out.confidence || 0) < 0.8) out.intent = 'UNCLEAR';\n\nreturn [{ json: { ...ctx, ...out } }];"
+      },
+      "id": "c3",
+      "name": "Parse Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 220]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r1",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "INTERESTED",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "INTERESTED"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r2",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "SEND_REPORT",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SEND_REPORT"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r3",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "OBJECTION",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "OBJECTION"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r4",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "NOT_INTERESTED",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "NOT_INTERESTED"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r5",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "OOO",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "OOO"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "ESCALATE"
+        }
+      },
+      "id": "s1",
+      "name": "Route Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1160, 220]
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $json.messageId }}",
+        "emailType": "text",
+        "message": "=Happy to walk you through it.\n\nHere is my calendar - grab any 30 minute slot that works:\nhttps://cal.com/armstrong/visibility-teardown\n\nI will run your full AI visibility scan before we speak so we are looking at real data, not slides.\n\nDanish\nArmstrong - armstrongco.ai",
+        "options": {}
+      },
+      "id": "g2",
+      "name": "Send Booking Link",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1420, 40],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $json.messageId }}",
+        "emailType": "text",
+        "message": "=On it - I will run the 12-query scan on {{ $json.prospect_name }} and send the breakdown over in the next day or so.\n\nIf you would rather I walk you through it live, my calendar is here:\nhttps://cal.com/armstrong/visibility-teardown\n\nDanish\nArmstrong - armstrongco.ai",
+        "options": {}
+      },
+      "id": "g3",
+      "name": "Confirm Report",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1420, 180],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#armstrong-leads",
+          "mode": "name"
+        },
+        "text": "=:fire: *{{ $json.intent }}* — {{ $json.prospect_name || $json.email }}\n*From:* {{ $json.from }}\n*Said:* {{ $json.reply_text }}\n*Confidence:* {{ $json.confidence }}\n{{ $json.objection_type ? '*Objection:* ' + $json.objection_type : '' }}\n\n*Drafted reply:*\n> {{ $json.suggested_reply }}\n\n<https://mail.google.com/mail/u/0/#inbox/{{ $json.threadId }}|Open thread>",
+        "otherOptions": {}
+      },
+      "id": "sl1",
+      "name": "Slack — Notify",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1660, 220],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE_AIRTABLE_BASE_ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Prospects",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["place_id"],
+          "value": {
+            "place_id": "={{ $json.place_id }}",
+            "status": "={{ $json.intent === 'NOT_INTERESTED' ? 'suppressed' : ($json.intent === 'OOO' ? 'requeue' : 'replied') }}",
+            "last_intent": "={{ $json.intent }}",
+            "last_event": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "a2",
+      "name": "Update Status",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1900, 220],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE_AIRTABLE_BASE_ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Suppression",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "domain": "={{ $json.domain }}",
+            "email": "={{ $json.email }}",
+            "reason": "replied_no"
+          }
+        },
+        "options": {}
+      },
+      "id": "a3",
+      "name": "Suppress Domain",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1420, 400],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {},
+      "id": "noop1",
+      "name": "OOO — Silent Requeue",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1420, 540]
+    }
+  ],
+  "connections": {
+    "Every 30 Min": {
+      "main": [[{ "node": "Get Unread Replies", "type": "main", "index": 0 }]]
+    },
+    "Get Unread Replies": {
+      "main": [[{ "node": "Loop Replies", "type": "main", "index": 0 }]]
+    },
+    "Loop Replies": {
+      "main": [
+        [],
+        [{ "node": "Parse Reply", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Reply": {
+      "main": [[{ "node": "Lookup Prospect", "type": "main", "index": 0 }]]
+    },
+    "Lookup Prospect": {
+      "main": [[{ "node": "Build Classify Payload", "type": "main", "index": 0 }]]
+    },
+    "Build Classify Payload": {
+      "main": [[{ "node": "Claude — Classify", "type": "main", "index": 0 }]]
+    },
+    "Claude — Classify": {
+      "main": [[{ "node": "Parse Classification", "type": "main", "index": 0 }]]
+    },
+    "Parse Classification": {
+      "main": [[{ "node": "Route Intent", "type": "main", "index": 0 }]]
+    },
+    "Route Intent": {
+      "main": [
+        [{ "node": "Send Booking Link", "type": "main", "index": 0 }],
+        [{ "node": "Confirm Report", "type": "main", "index": 0 }],
+        [{ "node": "Slack — Notify", "type": "main", "index": 0 }],
+        [{ "node": "Suppress Domain", "type": "main", "index": 0 }],
+        [{ "node": "OOO — Silent Requeue", "type": "main", "index": 0 }],
+        [{ "node": "Slack — Notify", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send Booking Link": {
+      "main": [[{ "node": "Slack — Notify", "type": "main", "index": 0 }]]
+    },
+    "Confirm Report": {
+      "main": [[{ "node": "Slack — Notify", "type": "main", "index": 0 }]]
+    },
+    "Suppress Domain": {
+      "main": [[{ "node": "Update Status", "type": "main", "index": 0 }]]
+    },
+    "OOO — Silent Requeue": {
+      "main": [[{ "node": "Update Status", "type": "main", "index": 0 }]]
+    },
+    "Slack — Notify": {
+      "main": [[{ "node": "Update Status", "type": "main", "index": 0 }]]
+    },
+    "Update Status": {
+      "main": [[{ "node": "Loop Replies", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "pinData": {}
+}

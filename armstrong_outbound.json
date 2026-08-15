@@ -1,0 +1,447 @@
+{
+  "name": "Armstrong — Outbound Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## PHASE 1 — QUERY MATRIX\nDeterministic. No LLM needed here.\nEdit the services/cities arrays in the Code node.\nservices x cities = one Serper call each.",
+        "height": 260,
+        "width": 380,
+        "color": 6
+      },
+      "id": "note1",
+      "name": "Note Phase 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-620, -120]
+    },
+    {
+      "parameters": {
+        "content": "## PHASE 2 — HARVEST\nSerper Places = Google Maps.\nQualify on rating, review count, website.\nUpsert to Airtable on place_id (dedupe).",
+        "height": 260,
+        "width": 460,
+        "color": 4
+      },
+      "id": "note2",
+      "name": "Note Phase 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-160, -120]
+    },
+    {
+      "parameters": {
+        "content": "## PHASE 3 — ENRICH + DRAFT + SEND\nScrape site, find email, one Claude call for\nsubject + opener, assemble from fixed template,\nsend, log, wait, repeat.",
+        "height": 300,
+        "width": 900,
+        "color": 5
+      },
+      "id": "note3",
+      "name": "Note Phase 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [520, -160]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "trigger1",
+      "name": "Daily Trigger 9am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-600, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "// EDIT ME. services x cities = your query matrix.\nconst MATRIX = [\n  {\n    gl: 'ae',\n    country: 'UAE',\n    services: ['company formation', 'business setup consultants', 'PRO services', 'med spa', 'aesthetic clinic', 'hair transplant clinic', 'cosmetic dentist'],\n    cities: ['Dubai', 'Business Bay Dubai', 'DIFC Dubai', 'JLT Dubai', 'Al Barsha Dubai', 'Abu Dhabi', 'Sharjah']\n  },\n  {\n    gl: 'us',\n    country: 'US',\n    services: ['med spa', 'aesthetic clinic', 'cosmetic dentist', 'plastic surgeon', 'immigration attorney', 'estate planning attorney', 'CPA firm'],\n    cities: ['Scottsdale AZ', 'Austin TX', 'Dallas TX', 'Miami FL', 'Atlanta GA', 'Nashville TN', 'Denver CO', 'Newport Beach CA']\n  }\n];\n\nconst out = [];\nfor (const block of MATRIX) {\n  for (const s of block.services) {\n    for (const c of block.cities) {\n      out.push({\n        json: {\n          query: `${s} in ${c}`,\n          service: s,\n          city: c,\n          gl: block.gl,\n          country: block.country,\n          cluster_id: `${s}|${c}`.toLowerCase().replace(/\\s+/g, '-')\n        }\n      });\n    }\n  }\n}\nreturn out;"
+      },
+      "id": "code1",
+      "name": "Build Query Matrix",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-380, 180]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop1",
+      "name": "Loop Queries",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-160, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://google.serper.dev/places",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ q: $json.query, gl: $json.gl, hl: 'en' }) }}",
+        "options": {}
+      },
+      "id": "http1",
+      "name": "Serper Places",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [60, 280],
+      "notes": "Header Auth credential: name=X-API-KEY value=<serper key>"
+    },
+    {
+      "parameters": {
+        "jsCode": "const CHAINS = ['ideal image', 'sono bello', 'european wax', 'aspen dental', 'smile direct', 'h&r block', 'jackson hewitt'];\nconst src = $('Loop Queries').first().json;\nconst out = [];\n\nfor (const item of $input.all()) {\n  const places = item.json.places || [];\n  for (const p of places) {\n    if (!p.website) continue;\n    if ((p.ratingCount || 0) < 15) continue;\n    if ((p.rating || 0) < 4.0) continue;\n    if (CHAINS.some(c => (p.title || '').toLowerCase().includes(c))) continue;\n\n    let domain = '';\n    try { domain = new URL(p.website).hostname.replace(/^www\\./, ''); } catch (e) { continue; }\n\n    out.push({ json: {\n      place_id: String(p.cid || `${p.title}-${p.address}`),\n      name: p.title,\n      category: p.category || src.service,\n      city: src.city,\n      country: src.country,\n      cluster_id: src.cluster_id,\n      website: p.website,\n      domain,\n      phone: p.phoneNumber || '',\n      rating: p.rating || 0,\n      review_count: p.ratingCount || 0,\n      status: 'new'\n    }});\n  }\n}\nreturn out;"
+      },
+      "id": "code2",
+      "name": "Normalize + Qualify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [280, 280]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE_AIRTABLE_BASE_ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Prospects",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": ["place_id"],
+          "value": {}
+        },
+        "options": {}
+      },
+      "id": "air1",
+      "name": "Upsert Prospects",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [500, 280],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE_AIRTABLE_BASE_ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Prospects",
+          "mode": "name"
+        },
+        "filterByFormula": "={status}='new'",
+        "limit": 40,
+        "options": {}
+      },
+      "id": "air2",
+      "name": "Fetch Batch To Send",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [60, 80]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop2",
+      "name": "Loop Prospects",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [280, 80]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.website }}",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "http2",
+      "name": "Scrape Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [560, 60],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Loop Prospects').first().json;\nconst html = String($input.first().json.data || $input.first().json.body || '');\n\nconst text = html\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .slice(0, 6000);\n\nconst BAD = /(sentry|wixpress|example\\.|\\.png|\\.jpg|\\.webp|godaddy|squarespace|@2x)/i;\nconst found = (html.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g) || [])\n  .map(e => e.toLowerCase())\n  .filter(e => !BAD.test(e));\n\n// prefer an address on their own domain\nconst onDomain = found.filter(e => e.endsWith('@' + p.domain));\nconst email = (onDomain[0] || found[0] || '').trim();\n\nreturn [{ json: { ...p, site_text: text, email, email_source: email ? (onDomain[0] ? 'domain' : 'scraped') : 'none' } }];"
+      },
+      "id": "code3",
+      "name": "Extract Text + Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, 60]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if1",
+      "name": "Has Email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1000, 60]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $input.first().json;\n\nconst system = `You write cold outreach openers for Armstrong, an AI-search visibility service.\nReturn ONLY valid JSON. No markdown fences. No preamble.\nSchema: {\"subject\": string, \"opener\": string}\nRULES:\n- subject: 3-6 words, lowercase, no colon, no question mark. Never use: quick question, boosting, unlock, elevate, transform, AI-powered, growth hack.\n- opener: ONE sentence, max 22 words, naming something SPECIFIC and TRUE from their website. An observation, not a compliment. Never invent facts.`;\n\nconst user = `BUSINESS: ${p.name}\\nCATEGORY: ${p.category}\\nCITY: ${p.city}\\nRATING: ${p.rating} (${p.review_count} reviews)\\n\\nWEBSITE TEXT:\\n${p.site_text}`;\n\nreturn [{ json: { ...p, payload: {\n  model: 'claude-sonnet-5',\n  max_tokens: 400,\n  system,\n  messages: [{ role: 'user', content: user }]\n}}}];"
+      },
+      "id": "code4",
+      "name": "Build Claude Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1220, 40]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": {}
+      },
+      "id": "http3",
+      "name": "Claude — Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 40],
+      "notes": "Header Auth credential: name=x-api-key value=<anthropic key>",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Build Claude Payload').first().json;\nconst raw = $input.first().json;\n\nlet subject = '', opener = '';\ntry {\n  const txt = (raw.content || []).filter(b => b.type === 'text').map(b => b.text).join('');\n  const clean = txt.replace(/```json|```/g, '').trim();\n  const parsed = JSON.parse(clean);\n  subject = parsed.subject || '';\n  opener = parsed.opener || '';\n} catch (e) {\n  return [{ json: { ...p, status: 'draft_failed', error: String(e) } }];\n}\n\nconst first = (p.name || '').split(/\\s|,/)[0];\n\nconst body = `Hi ${first} team,\n\n${opener}\n\nI ran a check on how AI search engines answer \"best ${p.category} in ${p.city}\". ${p.name} is not being named in those answers - competitors are.\n\nThat is a structure and citation-sourcing problem, not an ads problem. We rebuild how AI models read a business so it gets cited in the answer itself.\n\nWant the 12-query breakdown showing exactly where you are invisible? Free, takes me ten minutes.\n\nDanish\nArmstrong - armstrongco.ai`;\n\nreturn [{ json: { ...p, subject, opener, body, status: 'drafted' } }];"
+      },
+      "id": "code5",
+      "name": "Assemble Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1660, 40]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "gmail1",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1880, 40],
+      "onError": "continueRegularOutput",
+      "notes": "Swap for HTTP Request -> AgentMail /v0/inboxes/{inbox}/messages/send once domains are warm"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE_AIRTABLE_BASE_ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Prospects",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["place_id"],
+          "value": {
+            "place_id": "={{ $('Assemble Email').first().json.place_id }}",
+            "email": "={{ $('Assemble Email').first().json.email }}",
+            "subject": "={{ $('Assemble Email').first().json.subject }}",
+            "body": "={{ $('Assemble Email').first().json.body }}",
+            "status": "sent",
+            "sent_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "air3",
+      "name": "Log Sent",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [2100, 40],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE_AIRTABLE_BASE_ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Prospects",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["place_id"],
+          "value": {
+            "place_id": "={{ $json.place_id }}",
+            "status": "no_email"
+          }
+        },
+        "options": {}
+      },
+      "id": "air4",
+      "name": "Mark No Email",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1220, 240],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "amount": 90,
+        "unit": "seconds"
+      },
+      "id": "wait1",
+      "name": "Throttle",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2320, 40],
+      "webhookId": "aaaaaaaa-1111-2222-3333-444444444444"
+    }
+  ],
+  "connections": {
+    "Daily Trigger 9am": {
+      "main": [[{ "node": "Build Query Matrix", "type": "main", "index": 0 }]]
+    },
+    "Build Query Matrix": {
+      "main": [[{ "node": "Loop Queries", "type": "main", "index": 0 }]]
+    },
+    "Loop Queries": {
+      "main": [
+        [{ "node": "Fetch Batch To Send", "type": "main", "index": 0 }],
+        [{ "node": "Serper Places", "type": "main", "index": 0 }]
+      ]
+    },
+    "Serper Places": {
+      "main": [[{ "node": "Normalize + Qualify", "type": "main", "index": 0 }]]
+    },
+    "Normalize + Qualify": {
+      "main": [[{ "node": "Upsert Prospects", "type": "main", "index": 0 }]]
+    },
+    "Upsert Prospects": {
+      "main": [[{ "node": "Loop Queries", "type": "main", "index": 0 }]]
+    },
+    "Fetch Batch To Send": {
+      "main": [[{ "node": "Loop Prospects", "type": "main", "index": 0 }]]
+    },
+    "Loop Prospects": {
+      "main": [
+        [],
+        [{ "node": "Scrape Website", "type": "main", "index": 0 }]
+      ]
+    },
+    "Scrape Website": {
+      "main": [[{ "node": "Extract Text + Email", "type": "main", "index": 0 }]]
+    },
+    "Extract Text + Email": {
+      "main": [[{ "node": "Has Email?", "type": "main", "index": 0 }]]
+    },
+    "Has Email?": {
+      "main": [
+        [{ "node": "Build Claude Payload", "type": "main", "index": 0 }],
+        [{ "node": "Mark No Email", "type": "main", "index": 0 }]
+      ]
+    },
+    "Mark No Email": {
+      "main": [[{ "node": "Loop Prospects", "type": "main", "index": 0 }]]
+    },
+    "Build Claude Payload": {
+      "main": [[{ "node": "Claude — Draft", "type": "main", "index": 0 }]]
+    },
+    "Claude — Draft": {
+      "main": [[{ "node": "Assemble Email", "type": "main", "index": 0 }]]
+    },
+    "Assemble Email": {
+      "main": [[{ "node": "Send Email", "type": "main", "index": 0 }]]
+    },
+    "Send Email": {
+      "main": [[{ "node": "Log Sent", "type": "main", "index": 0 }]]
+    },
+    "Log Sent": {
+      "main": [[{ "node": "Throttle", "type": "main", "index": 0 }]]
+    },
+    "Throttle": {
+      "main": [[{ "node": "Loop Prospects", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "pinData": {}
+}
