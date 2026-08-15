@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { requireEnv } from "./env.js";
 import { Classification, type ParsedReply, type ProspectContext } from "./types.js";
 
 /**
@@ -35,7 +36,14 @@ confident single label - score it accordingly.
 objection_type: only when intent is OBJECTION, else null.
 suggested_reply: max 60 words, plain, no exclamation marks, no emoji. Sign off as Danish.`;
 
-const client = new Anthropic();
+/**
+ * Built on first use, not at import time — so importing this module for
+ * `applyConfidenceFloor` (as the tests do) never needs an API key.
+ */
+let client: Anthropic | undefined;
+function getClient(): Anthropic {
+  return (client ??= new Anthropic({ apiKey: requireEnv("ANTHROPIC_API_KEY") }));
+}
 
 /**
  * Classify one reply into a state transition.
@@ -57,7 +65,7 @@ export async function classifyReply(
     reply.replyText,
   ].join("\n");
 
-  const response = await client.messages.parse({
+  const response = await getClient().messages.parse({
     model: MODEL,
     max_tokens: 1024,
     system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
