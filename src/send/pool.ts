@@ -74,6 +74,3 @@ export class InboxPool {
 export function nextDelayMs(minMs = 60_000, maxMs = 180_000): number {
   return Math.floor(minMs + Math.random() * (maxMs - minMs));
 }
-
-export const sleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));

@@ -37,7 +37,8 @@ if (live) {
 
 const result = await transport.send(inbox, {
   to,
-  subject: "test from mail-mafia",
+  // Timestamped so repeat tests are distinguishable in a crowded inbox.
+  subject: `test from mail-mafia — ${new Date().toISOString().slice(11, 19)} UTC`,
   body: [
     "This is a plumbing test from the mail-mafia sending layer.",
     "",
