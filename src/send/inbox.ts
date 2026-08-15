@@ -5,11 +5,18 @@ import "../env.js";
  * the other eleven is a config change rather than a rewrite.
  */
 export interface Inbox {
-  /** Stable key for quota accounting. Use the address. */
+  /** Stable key for quota accounting. Use the authenticating address. */
   id: string;
+  /**
+   * What recipients see in the From header. May be a send-as alias rather than
+   * the mailbox you authenticate with — e.g. auth as gitartha@station91.in and
+   * send as gitartha@armstrongco.ai. The alias must be verified in Gmail under
+   * Settings → Accounts → "Send mail as", or Gmail rewrites it to the primary.
+   */
   address: string;
   /** Display name on the From header. Must match how the body signs off. */
   fromName: string;
+  /** Credentials for the real mailbox. `user` is the auth identity, not the From. */
   smtp: { host: string; port: number; user: string; pass: string };
   /** Hard cap on sends per UTC day for this mailbox. */
   dailyCap: number;
@@ -46,7 +53,8 @@ export function loadInboxes(): Inbox[] {
   return [
     {
       id: user,
-      address: user,
+      // Defaults to the auth address; set SMTP_FROM to send as a verified alias.
+      address: process.env.SMTP_FROM ?? user,
       fromName: process.env.SMTP_FROM_NAME ?? "Danish",
       smtp: {
         host: process.env.SMTP_HOST ?? "smtp.gmail.com",
