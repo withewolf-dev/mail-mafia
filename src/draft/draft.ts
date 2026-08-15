@@ -17,6 +17,22 @@ export const DraftSlots = z.object({
 });
 export type DraftSlots = z.infer<typeof DraftSlots>;
 
+/**
+ * The Google Maps exports carry no category, but the email's central claim is
+ * built from it ("best {category} in {city}"). Ask for it alongside the copy —
+ * the model is already reading the site. This is a factual classification, not
+ * a creative slot, so it doesn't dilute the two-slot rule.
+ */
+export const DraftSlotsWithCategory = DraftSlots.extend({
+  category: z
+    .string()
+    .describe(
+      "The search phrase a customer would type, e.g. 'med spa', 'cosmetic dentist'. " +
+        "Two to three words, lowercase, no brand names.",
+    ),
+});
+export type DraftSlotsWithCategory = z.infer<typeof DraftSlotsWithCategory>;
+
 const SYSTEM = `You write cold outreach openers for Armstrong, an AI-search visibility service.
 
 RULES:
@@ -94,7 +110,10 @@ export class DraftRejected extends Error {
   }
 }
 
-export async function draftSlots(input: DraftInput): Promise<DraftSlots> {
+export async function draftSlots(
+  input: DraftInput,
+  inferCategory = false,
+): Promise<DraftSlotsWithCategory> {
   const user = [
     `BUSINESS: ${input.name}`,
     `CATEGORY: ${input.category}`,
@@ -105,7 +124,7 @@ export async function draftSlots(input: DraftInput): Promise<DraftSlots> {
     input.siteText,
   ].join("\n");
 
-  let slots = await callModel(user);
+  let slots = await callModel(user, inferCategory);
   let problems = violations(slots);
   if (problems.length === 0) return slots;
 
@@ -114,23 +133,25 @@ export async function draftSlots(input: DraftInput): Promise<DraftSlots> {
   slots = await callModel(
     `${user}\n\nYour previous attempt broke these rules: ${problems.join("; ")}.\n` +
       `Previous opener: "${slots.opener}"\nRewrite it to comply. Keep it specific and true.`,
+    inferCategory,
   );
   problems = violations(slots);
   if (problems.length > 0) throw new DraftRejected(problems, slots);
   return slots;
 }
 
-async function callModel(user: string): Promise<DraftSlots> {
+async function callModel(user: string, inferCategory: boolean): Promise<DraftSlotsWithCategory> {
+  const schema = inferCategory ? DraftSlotsWithCategory : DraftSlots;
   const response = await getClient().messages.parse({
     model: MODEL,
     max_tokens: 400,
     system: SYSTEM,
     messages: [{ role: "user", content: user }],
-    output_config: { format: zodOutputFormat(DraftSlots) },
+    output_config: { format: zodOutputFormat(schema) },
   });
   const parsed = response.parsed_output;
   if (!parsed) throw new Error("Draft failed: model returned no structured output.");
-  return parsed;
+  return parsed as DraftSlotsWithCategory;
 }
 
 /**
@@ -157,10 +178,13 @@ Armstrong - armstrongco.ai`;
 export interface Draft {
   subject: string;
   opener: string;
+  category: string;
   body: string;
 }
 
-export async function draftEmail(input: DraftInput): Promise<Draft> {
-  const slots = await draftSlots(input);
-  return { ...slots, body: assembleBody(input, slots) };
+export async function draftEmail(input: DraftInput, inferCategory = false): Promise<Draft> {
+  const slots = await draftSlots(input, inferCategory);
+  // A model-inferred category feeds straight into the body's central claim.
+  const resolved = { ...input, category: slots.category ?? input.category };
+  return { ...slots, category: resolved.category, body: assembleBody(resolved, slots) };
 }

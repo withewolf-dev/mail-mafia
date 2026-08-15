@@ -26,6 +26,15 @@ create table if not exists prospects (
   updated_at     timestamptz not null default now()
 );
 
+-- Draft storage. Kept on the prospect rather than a separate table: there is
+-- exactly one live draft per prospect, and re-drafting replaces it.
+alter table prospects add column if not exists subject     text;
+alter table prospects add column if not exists opener      text;
+alter table prospects add column if not exists body        text;
+alter table prospects add column if not exists drafted_at  timestamptz;
+-- Why a draft failed, so a rerun can retry only the failures.
+alter table prospects add column if not exists draft_error text;
+
 -- Domain is deliberately NOT unique: a chain or multi-location practice has
 -- several Google listings sharing one website, and each is a real row. The
 -- real rule is one *send* per domain, enforced in the send batch query — not
