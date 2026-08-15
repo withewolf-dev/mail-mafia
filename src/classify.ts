@@ -68,7 +68,11 @@ export async function classifyReply(
   const response = await getClient().messages.parse({
     model: MODEL,
     max_tokens: 1024,
-    system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
+    // No cache_control here on purpose: this system prompt is ~289 tokens and
+    // Haiku 4.5 won't cache a prefix under 4096. The marker silently no-ops
+    // (verified: cache_creation and cache_read both 0). Worth adding back only
+    // if this prompt grows past the minimum — e.g. few-shot real replies.
+    system: [{ type: "text", text: SYSTEM }],
     messages: [{ role: "user", content: user }],
     output_config: { format: zodOutputFormat(Classification) },
   });
