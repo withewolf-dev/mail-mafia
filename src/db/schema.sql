@@ -26,8 +26,12 @@ create table if not exists prospects (
   updated_at     timestamptz not null default now()
 );
 
--- One row per business. Partial indexes so the many null domains don't collide.
-create unique index if not exists prospects_domain_key
+-- Domain is deliberately NOT unique: a chain or multi-location practice has
+-- several Google listings sharing one website, and each is a real row. The
+-- real rule is one *send* per domain, enforced in the send batch query — not
+-- one row per domain, which would silently discard locations on import.
+drop index if exists prospects_domain_key;
+create index if not exists prospects_domain_idx
   on prospects (domain) where domain is not null;
 create index if not exists prospects_name_key_idx on prospects (name_key);
 create index if not exists prospects_status_idx on prospects (status);
@@ -52,5 +56,9 @@ create table if not exists sends (
   sent_at     timestamptz not null default now()
 );
 
-create index if not exists sends_inbox_day_idx
-  on sends (inbox_id, (sent_at::date));
+-- Not (inbox_id, sent_at::date): casting timestamptz to date depends on the
+-- session timezone, so Postgres rejects it as non-IMMUTABLE. A plain composite
+-- index serves the daily-cap range query just as well:
+--   where inbox_id = $1 and sent_at >= date_trunc('day', now() at time zone 'utc')
+create index if not exists sends_inbox_sent_at_idx
+  on sends (inbox_id, sent_at);
