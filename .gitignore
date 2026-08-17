@@ -20,6 +20,14 @@ data/
 *.local.json
 *.csv
 
+# crawled pages — working folder, replaced by a Neon table later
+crawl-sites/
+
+# AI Overview screenshots. Working evidence, not source: they are large PNGs
+# that change on every re-capture, and ai_overviews.screenshot_path in Neon is
+# the record of what was read. Re-run src/cli/ai-overview.ts to regenerate.
+ai-overviews/
+
 # os / editor
 .DS_Store
 .vscode/

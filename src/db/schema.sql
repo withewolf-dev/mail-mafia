@@ -35,6 +35,22 @@ alter table prospects add column if not exists drafted_at  timestamptz;
 -- Why a draft failed, so a rerun can retry only the failures.
 alter table prospects add column if not exists draft_error text;
 
+-- What the crawler found, in plain words: "parked: GoDaddy lander",
+-- "ok: 25 pages, 152,459 chars", "unreachable: HTTP 500". Kept because
+-- "site unreachable or empty" cannot tell a dead domain from a slow one, and
+-- only the first is worth giving up on.
+alter table prospects add column if not exists scraping_remarks text;
+
+-- Owner enrichment: two web searches per prospect ("<name> owner", then
+-- "<name> <owner> email"), extracted from result snippets. owner_email is only
+-- ever an address that appeared verbatim in a result — never pattern-guessed.
+-- owner_notes keeps the evidence + confidence so a human can audit the claim.
+alter table prospects add column if not exists owner_first_name text;
+alter table prospects add column if not exists owner_last_name  text;
+alter table prospects add column if not exists owner_email      text;
+alter table prospects add column if not exists owner_notes      text;
+alter table prospects add column if not exists owner_found_at   timestamptz;
+
 -- Domain is deliberately NOT unique: a chain or multi-location practice has
 -- several Google listings sharing one website, and each is a real row. The
 -- real rule is one *send* per domain, enforced in the send batch query — not
@@ -52,6 +68,34 @@ create table if not exists suppression (
   reason      text not null,
   created_at  timestamptz not null default now()
 );
+
+-- What Google's AI Overview said, per query, with the screenshot it was read
+-- from. Its own table rather than more columns on prospects: there are several
+-- queries per prospect, and the Overview is a claim to be weighed against the
+-- registry and the site — not a fact to overwrite them with. Keeping the
+-- screenshot path means a disputed owner can be re-checked by eye later.
+create table if not exists ai_overviews (
+  id                bigserial primary key,
+  prospect_id       bigint references prospects(id) on delete cascade,
+  query             text not null,
+  -- 'ok', 'no-overview' (Google served none), 'blocked' (bot check).
+  status            text not null,
+  screenshot_path   text,
+  overview_text     text,
+  owner_first_name  text,
+  owner_last_name   text,
+  owner_role        text,
+  email             text,
+  other_people      text,
+  cited_sources     text,
+  confidence        numeric(3,2),
+  captured_at       timestamptz not null default now()
+);
+create index if not exists ai_overviews_prospect_idx on ai_overviews (prospect_id);
+-- One row per question asked. Without this a rerun stacks another copy of the
+-- same capture, and one prospect quietly becomes six near-identical rows.
+create unique index if not exists ai_overviews_prospect_query_idx
+  on ai_overviews (prospect_id, query);
 
 -- Persistent send quota, so a daily cap survives a restart. Replaces the
 -- in-memory counter in src/send/pool.ts.

@@ -13,7 +13,7 @@ those and the email reads as an attack.
 ## The skeleton
 
 ```
-Hey {{business_short}},
+Hey {{owner}},
 
 {{social_proof}}. {{concession}}
 
@@ -25,9 +25,9 @@ So {{when}} I asked one where to go in {{city}} for {{n}} things you do:
   {{service_2}}  ->  {{rivals_2}}. Not you.
   {{service_3}}  ->  {{rivals_3}}. Not you.
 
-{{depth_stat}}
+{{broad_contrast}}
 
-{{diagnosis}}
+{{market_stats}}
 
 {{cta}}
 
@@ -39,11 +39,19 @@ So {{when}} I asked one where to go in {{city}} for {{n}} things you do:
 
 ## Slots
 
-### 1. `business_short`
-Their name with the Maps suffix stripped. `Born Again Doctor-Medical Center` →
-`Born Again Doctor`. Never `{first_token} team` — that produces "Hi Born team".
+### 1. `owner`
+The person, not the business. `Hey Sualeh,`
 
-**Source:** `prospect.name`, cut at the first `-`, `,` or `|`.
+**Source:** `prospect.owner_first_name`.
+**Physicians take the title instead:** `Hey Dr. Hassanein,` — when the FL DOH
+licence profession is a doctor grade (Medical Doctor, Osteopathic Physician) or
+the AI Overview role says physician/surgeon/dermatologist. Estheticians, PAs and
+studio owners get the first name; "Dr." on a body-sculpting studio owner is
+worse than no title.
+
+**Never** `{first_token} team` — that produced "Hi Born team" on the August 15
+batch. **Never** send at all without a name: a cold email that cannot greet a
+person has no business being in this format.
 
 ### 2. `social_proof`
 Hard numbers only. `4.9 stars, 116 Google reviews`.
@@ -94,38 +102,44 @@ Three is the number. Two feels thin, four reads as a report.
 - `Not you.` repeats verbatim on every line. The repetition is the device; vary
   it and the drumbeat dies.
 
-### 7. `depth_stat`
-One quantified escalation past "you weren't named".
+### 7. `broad_contrast`
+The sharpest finding in the email: they rank for the category and vanish on the
+procedures. Two sentences, from the category probe.
 
-> It read about 30 pages to build those answers. None of them were yours.
+> Ask for "best med spa in Ocala" and you do come up. So you show up for the
+> broad term and disappear on the three procedures people actually book.
 
-**Source:** `sum(sourcesRead.length)`, and `siteWasRead === false` across all
-queries. Round hard — `about 30`, not `31`.
-**Fallback:** if their site *was* read, this becomes the stronger line: *"It read
-your site and still recommended someone else."*
+**Source:** the `probeCategory` result. This slot is **conditional on the probe
+actually saying so.** If the category probe did *not* name them, the contrast is
+false and the slot becomes the depth line instead: *"It read about 30 pages to
+build those answers. None of them were yours."* Never assert the contrast
+because it reads better — it is the one claim in the email an owner can check in
+ten seconds.
 
-### 8. `diagnosis`
-The turn. Compliment their content, then name the structural gap. This is the
-only slot carrying an opinion, and it must land as the *reason* for slot 6, not
-a new topic.
+### 8. `market_stats`
+What the missed procedures are worth, so absence has a price attached.
 
-> That isn't a content problem - your {{page}} is more detailed than any page it
-> did recommend. Your site just never ties what you do to where you do it.
+> Hair transplant is an $11B global market growing 22% a year.
+> Vaginal rejuvenation is tracking to $14B by 2030.
 
-**Source:** `facts.contentGaps` + the deepest page found.
-**Rules:** never reduce the fix to one word ("just add Ocala") — that makes it
-sound like an afternoon's work and there's no reason to reply. Keep it
-structural.
+**Source:** `findMarketStats()` — published figures with a source and URL, never
+estimated. One or two lines, on procedures from slot 6 only.
+**Rules:** these numbers go to someone who may know their own market better than
+we do, so a wrong figure discredits the probe findings, which are the part that
+is genuinely theirs and genuinely true. Two solid numbers beat three where one
+is invented. If nothing credible was found, drop the slot — the email still
+works without it.
 
 ### 9. `cta`
-A named artifact plus what's inside it. Not a meeting.
+Two lines, fixed: one sentence naming what Armstrong does, then one short
+question offering the AI Visibility Report. Not a meeting.
 
-> Want the full AI visibility report? Every query, the pages it read, and which
-> competitor is getting the booking instead.
+> Armstrong helps you get discovered in these AI searches.
+> Want the AI Visibility Report for your business?
 
-**Rules:** never "losing revenue" — you can't see their revenue. "Which
-competitor is getting the booking instead" says the same thing and is backed by
-data you hold. Whatever you name here, you must be able to send within an hour.
+**Rules:** use these two lines verbatim. Never "losing revenue" — you cannot
+see their revenue. The report offered must be sendable within the hour: we hold
+every query, every answer and every source, so it is.
 
 ---
 
@@ -136,6 +150,7 @@ data you hold. Whatever you name here, you must be able to send within an hour.
 2. **Plain words.** No "model", "LLM", "GEO", "citation-sourcing", "schema".
 3. **70–170 words**, excluding the result lines.
 4. **No links, no images, no attachment.** Plain text.
+   No em or en dashes anywhere, subject or body - plain hyphens only.
 5. **One idea.** Slots 6–8 are one argument, not three.
 
 ## When to send nothing
@@ -148,8 +163,12 @@ data you hold. Whatever you name here, you must be able to send within an hour.
 
 ## Worked example
 
+Born Again Doctor, Ocala. Every line below traces to stored evidence: the rating
+from the Maps row, the three services from the crawled site, the competitor
+names from four real probes, the market figures from published sources.
+
 ```
-Hey Born Again Doctor,
+Hey Sualeh,
 
 4.9 stars, 116 Google reviews. Locally you've clearly earned it.
 
@@ -164,26 +183,44 @@ you do:
   vaginal rejuvenation   ->  Advanced Aesthetics, Vantage Urologic. Not you.
   ED shockwave therapy   ->  Gameday Men's Health, Arviv. Not you.
 
-It read about 30 pages to build those answers. None of them
-were yours.
+Ask for "best med spa in Ocala" and you do come up. So you show up
+for the broad term and disappear on the three procedures people
+actually book.
 
-That isn't a content problem - your vaginal rejuvenation page is
-more detailed than any page it did recommend. Your site just never
-ties what you do to where you do it.
+Hair transplant is an $11B global market growing 22% a year.
+Vaginal rejuvenation is tracking to $14B by 2030.
 
-Want the full AI visibility report? Every query, the pages it read,
-and which competitor is getting the booking instead.
+Want the full breakdown of all four?
 
-Danish
+Gitartha
 Armstrong - armstrongco.ai
 ```
 
+The result block is aligned with spaces on purpose. It is the only visual
+structure in the email and it survives plain text, which HTML would not — see
+the plain-text rule in the conventions.
+
 ## Subject lines
 
-Pull from the email's own strongest line; never invent a new idea. Three to
-five, lowercase, no colons.
+One fixed structure, no variants:
 
-- `you're missing from 3 of 4 AI searches`
-- `Ocala hair restoration + AI search`
-- `4.9 stars, invisible to ChatGPT`
-- `quick idea for {{business_short}}`
+```
+asked ai for {{service}} in {{city}}, {{state}} - got {{rival}}, not you
+```
+
+- `{{service}}` and `{{rival}}` come from the same result line - the miss with
+  the strongest competitor set. Rival shortened to how a local would say it
+  (`VIP`, `macinnis`), lowercase like the rest of the subject.
+- `{{city}}, {{state}}` spelled out: `the villages, florida`, `ocala, florida`.
+- Plain hyphen, lowercase throughout, no colons, no em dashes.
+- Everything in it must be true: the probe really missed them and really named
+  the rival. Never pick a rival for the subject that is not in the body.
+- If the only usable miss has no nameable rival (all named rivals are our own
+  prospects), drop the rival clause instead of inventing one:
+  `asked ai for {{service}} in {{city}}, {{state}} - you weren't named`
+
+Examples:
+
+- `asked ai for botox in the villages, florida - got VIP, not you`
+- `asked ai for acne treatment in the villages, florida - got macinnis, not you`
+- `asked ai for hair restoration in ocala, florida - got regenu, not you`
