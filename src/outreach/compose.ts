@@ -24,7 +24,7 @@ export const ComposedEmail = z.object({
     .string()
     .describe(
       "The full email, plain text, greeting through sign-off, in the skeleton's exact shape. " +
-        "The result block keeps its space alignment.",
+        "Paragraphs are single lines with no hard wraps; the result block is 'Service: rivals. Not you.' entries, one per line, blank line between, no arrows.",
     ),
   evidenceUsed: z
     .array(z.string())
@@ -88,11 +88,14 @@ export async function composeEmail(input: ComposeInput): Promise<ComposedEmail> 
     "  that is not in them, however plausible it sounds locally. This is the one mistake the",
     "  email cannot survive: the owner knows their own market.",
     "- Use the greeting given. Do not re-derive it, do not add a title that was not supplied.",
-    "- The result block keeps its alignment: two leading spaces, service, then '  ->  ',",
-    "  then rivals, then 'Not you.' verbatim on every line. Pad with spaces so the '->'",
-    "  columns line up with each other.",
-    "- HARD WRAP every prose line at about 65 characters, as the worked example is wrapped.",
-    "  This is plain-text email; long unwrapped lines break in narrow clients.",
+    "- The result block: one entry per service, written 'Service: rivals. Not you.' — the",
+    "  service name capitalized, then a colon, then the rivals, then 'Not you.' verbatim.",
+    "  NO arrows, NO space padding, NO columns: this is plain-text email read in a proportional",
+    "  font (Gmail etc.) where alignment shatters. Put a BLANK LINE between entries so that when",
+    "  a line wraps on a phone the entries stay visually separate.",
+    "- Do NOT hard-wrap the prose. Write each paragraph as a single line with no newlines inside",
+    "  it; separate paragraphs with one blank line. The reader's client wraps to their screen —",
+    "  baked-in line breaks become ragged mid-sentence wraps on a phone.",
     "- Shorten rival names to how a local would say them out loud. 'Marion Dermatology',",
     "  not 'Marion Dermatology (Bryan C. Hicks, MD)'. Drop the city suffix, the practitioner",
     "  parenthetical and the legal form (LLC, PA). Two or three rivals per line, never more.",
@@ -105,8 +108,9 @@ export async function composeEmail(input: ComposeInput): Promise<ComposedEmail> 
     "- evidenceUsed lists every claim with its source.",
   ].join("\n");
 
+  const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
   const lines = input.misses.map(
-    (m) => `  ${m.label}  ->  ${m.competitors.slice(0, 3).join(", ")}. Not you.`,
+    (m) => `${cap(m.label)}: ${m.competitors.slice(0, 3).join(", ")}. Not you.`,
   );
 
   const user = [
@@ -127,8 +131,8 @@ export async function composeEmail(input: ComposeInput): Promise<ComposedEmail> 
         `  sources read: ${m.sourceCount}; own site read: ${m.ownSiteRead ? "yes" : "no"}`,
     ),
     "",
-    "SUGGESTED RESULT BLOCK (keep this alignment):",
-    ...lines,
+    "SUGGESTED RESULT BLOCK (one entry per service, blank line between, no arrows):",
+    lines.join("\n\n"),
     "",
     input.category
       ? `CATEGORY PROBE: "${input.category.label}" — named them: ${input.category.namedUs ? "YES" : "NO"}` +

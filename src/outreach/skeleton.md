@@ -21,9 +21,11 @@ Hey {{owner}},
 
 So {{when}} I asked one where to go in {{city}} for {{n}} things you do:
 
-  {{service_1}}  ->  {{rivals_1}}. Not you.
-  {{service_2}}  ->  {{rivals_2}}. Not you.
-  {{service_3}}  ->  {{rivals_3}}. Not you.
+{{Service_1}}: {{rivals_1}}. Not you.
+
+{{Service_2}}: {{rivals_2}}. Not you.
+
+{{Service_3}}: {{rivals_3}}. Not you.
 
 {{broad_contrast}}
 
@@ -91,15 +93,17 @@ before sending — do not fudge this word.
 Three is the number. Two feels thin, four reads as a report.
 
 **Source:** `ProbeResult[]` where `namedIn === 0`, richest competitor sets first.
-`service_n` is `query.label` (2–3 words). `rivals_n` is 2–3 competitor names,
-**shortened to how a local would say them** — `Gameday Men's Health`, not
-`Gameday Men's Health – Ocala`.
+`service_n` is `query.label` (2–3 words), **capitalized** and followed by a colon
+(`Hair restoration:`). `rivals_n` is 2–3 competitor names, **shortened to how a
+local would say them** — `Gameday Men's Health`, not `Gameday Men's Health – Ocala`.
 
 **Rules:**
+- One entry per service: `Service: rivals. Not you.` No arrows, no padding. A
+  blank line separates each entry so they stay distinct when a phone wraps them.
 - Only names the probe actually returned. Never a plausible-sounding local business.
 - Never a name that is also in your prospect list — you'd be telling one client
   their neighbour is winning.
-- `Not you.` repeats verbatim on every line. The repetition is the device; vary
+- `Not you.` repeats verbatim on every entry. The repetition is the device; vary
   it and the drumbeat dies.
 
 ### 7. `broad_contrast`
@@ -172,20 +176,17 @@ Hey Sualeh,
 
 4.9 stars, 116 Google reviews. Locally you've clearly earned it.
 
-Your patients don't scroll Google the way they used to. A lot of
-them now ask ChatGPT, Gemini or Perplexity "who's good for this
-near me" and just go with the answer.
+Your patients don't scroll Google the way they used to. A lot of them now ask ChatGPT, Gemini or Perplexity "who's good for this near me" and just go with the answer.
 
-So this morning I asked one where to go in Ocala for three things
-you do:
+So this morning I asked one where to go in Ocala for three things you do:
 
-  hair restoration       ->  Tempus, ReGenU, Marlene Glass. Not you.
-  vaginal rejuvenation   ->  Advanced Aesthetics, Vantage Urologic. Not you.
-  ED shockwave therapy   ->  Gameday Men's Health, Arviv. Not you.
+Hair restoration: Tempus, ReGenU, Marlene Glass. Not you.
 
-Ask for "best med spa in Ocala" and you do come up. So you show up
-for the broad term and disappear on the three procedures people
-actually book.
+Vaginal rejuvenation: Advanced Aesthetics, Vantage Urologic. Not you.
+
+ED shockwave therapy: Gameday Men's Health, Arviv. Not you.
+
+Ask for "best med spa in Ocala" and you do come up. So you show up for the broad term and disappear on the three procedures people actually book.
 
 Hair transplant is an $11B global market growing 22% a year.
 Vaginal rejuvenation is tracking to $14B by 2030.
@@ -196,9 +197,15 @@ Gitartha
 Armstrong - armstrongco.ai
 ```
 
-The result block is aligned with spaces on purpose. It is the only visual
-structure in the email and it survives plain text, which HTML would not — see
-the plain-text rule in the conventions.
+Prose paragraphs are single lines with **no hard wraps** — the reader's client
+wraps to their screen, and baked-in breaks turn into ragged mid-sentence wraps
+on a phone. The result block is `Service: rivals. Not you.` entries — service
+name capitalized, a colon, no arrows and **no space padding** — with a **blank
+line between each entry**. Plain-text email is read in a proportional font
+(Gmail etc.), so aligned arrow columns shatter; the colon format and the blank
+lines carry the structure instead, and stay legible however a phone wraps them.
+(Two short market lines in slot 8 stay on their own lines by design — each is
+short enough not to wrap.)
 
 ## Subject lines
 

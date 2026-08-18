@@ -10,7 +10,7 @@
 import "../env.js";
 import { loadInboxes } from "../send/inbox.js";
 import { InboxPool, InMemoryQuotaStore } from "../send/pool.js";
-import { SmtpTransport, transportFromEnv } from "../send/transport.js";
+import { DryRunTransport, SmtpTransport, transportFromEnv } from "../send/transport.js";
 
 const to = process.argv[2];
 if (!to) {
@@ -21,18 +21,20 @@ if (!to) {
 const inboxes = loadInboxes();
 const pool = new InboxPool(inboxes, new InMemoryQuotaStore());
 const transport = transportFromEnv();
-const live = transport instanceof SmtpTransport;
+const live = !(transport instanceof DryRunTransport);
+const kind = transport.constructor.name.replace("Transport", "");
 
 console.log(
-  `${inboxes.length} inbox(es), ${pool.dailyCapacity} sends/day capacity — ${live ? "LIVE" : "DRY RUN"}\n`,
+  `${inboxes.length} inbox(es), ${pool.dailyCapacity} sends/day capacity — ` +
+    `${live ? `LIVE via ${kind}` : "DRY RUN"}\n`,
 );
 
 const inbox = await pool.next();
 
-if (live) {
+if (transport instanceof SmtpTransport) {
   // Fail on bad credentials before composing anything.
-  await (transport as SmtpTransport).verify(inbox);
-  console.log(`SMTP connection to ${inbox.smtp.host} verified.\n`);
+  await transport.verify(inbox);
+  console.log(`SMTP connection to ${inbox.smtp!.host} verified.\n`);
 }
 
 const result = await transport.send(inbox, {
@@ -51,4 +53,4 @@ const result = await transport.send(inbox, {
 
 console.log(result.dryRun ? "\nDry run complete — nothing sent." : `\nSent. messageId=${result.messageId}`);
 
-if (live) (transport as SmtpTransport).close();
+if (transport instanceof SmtpTransport) transport.close();
