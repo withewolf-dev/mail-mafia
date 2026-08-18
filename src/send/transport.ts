@@ -74,6 +74,7 @@ export class SmtpTransport implements Transport {
     const info = await this.transporterFor(inbox).sendMail({
       from: { name: inbox.fromName, address: inbox.address },
       to: email.to,
+      ...(inbox.replyTo ? { replyTo: inbox.replyTo } : {}),
       subject: email.subject,
       text: email.body,
     });
@@ -110,6 +111,7 @@ export class ResendTransport implements Transport {
       {
         from: `${inbox.fromName} <${inbox.address}>`,
         to: [email.to],
+        ...(inbox.replyTo ? { replyTo: inbox.replyTo } : {}),
         subject: email.subject,
         // Plain text only, same rule as everywhere else in the pipeline.
         text: email.body,

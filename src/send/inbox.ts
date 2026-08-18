@@ -17,6 +17,12 @@ export interface Inbox {
   /** Display name on the From header. Must match how the body signs off. */
   fromName: string;
   /**
+   * Where replies should go, if different from the From address. The sending
+   * subdomain (mail.armstrongco.ai) has no inbox, so replies are pointed at a
+   * mailbox that does — e.g. hello@armstrongco.ai, which receives via Google.
+   */
+  replyTo?: string;
+  /**
    * Credentials for the real mailbox. `user` is the auth identity, not the From.
    * Optional: the Resend transport sends over the API and needs no SMTP creds.
    */
@@ -58,6 +64,8 @@ export function loadInboxes(): Inbox[] {
         id: address,
         address,
         fromName: process.env.MAIL_FROM_NAME ?? "Gitartha",
+        // The From subdomain can't receive; send replies somewhere that can.
+        replyTo: process.env.MAIL_REPLY_TO,
         // Deliberately low. A brand-new domain sending 40 cold emails on day
         // one is how it gets flagged. Raise it only after warmup.
         dailyCap: Number(process.env.MAIL_DAILY_CAP ?? 20),
