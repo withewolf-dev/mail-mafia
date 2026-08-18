@@ -16,8 +16,17 @@ export interface Inbox {
   address: string;
   /** Display name on the From header. Must match how the body signs off. */
   fromName: string;
-  /** Credentials for the real mailbox. `user` is the auth identity, not the From. */
-  smtp: { host: string; port: number; user: string; pass: string };
+  /**
+   * Where replies should go, if different from the From address. The sending
+   * subdomain (mail.armstrongco.ai) has no inbox, so replies are pointed at a
+   * mailbox that does — e.g. hello@armstrongco.ai, which receives via Google.
+   */
+  replyTo?: string;
+  /**
+   * Credentials for the real mailbox. `user` is the auth identity, not the From.
+   * Optional: the Resend transport sends over the API and needs no SMTP creds.
+   */
+  smtp?: { host: string; port: number; user: string; pass: string };
   /** Hard cap on sends per UTC day for this mailbox. */
   dailyCap: number;
 }
@@ -25,8 +34,13 @@ export interface Inbox {
 /**
  * Read the inbox pool from the environment.
  *
- * Single-inbox form (what we're on now):
- *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM_NAME, SMTP_DAILY_CAP
+ * Resend form (what we're moving to): set RESEND_API_KEY and the sender is
+ * built from
+ *   MAIL_FROM (e.g. hello@mail.armstrongco.ai), MAIL_FROM_NAME, MAIL_DAILY_CAP
+ * No SMTP credentials are needed — the Resend transport uses the HTTP API.
+ *
+ * SMTP form (the test-phase rig):
+ *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, SMTP_FROM_NAME, SMTP_DAILY_CAP
  *
  * When the pool grows, set INBOXES to a JSON array of the same shape and this
  * is the only function that changes.
@@ -34,6 +48,30 @@ export interface Inbox {
 export function loadInboxes(): Inbox[] {
   const json = process.env.INBOXES;
   if (json) return JSON.parse(json) as Inbox[];
+
+  // Resend is the sender once RESEND_API_KEY is set. The From address is the
+  // whole identity — it must be on a domain verified in the Resend dashboard.
+  if (process.env.RESEND_API_KEY) {
+    const address = process.env.MAIL_FROM;
+    if (!address) {
+      throw new Error(
+        "RESEND_API_KEY is set but MAIL_FROM is empty. Set MAIL_FROM to an " +
+          "address on a Resend-verified domain, e.g. hello@mail.armstrongco.ai.",
+      );
+    }
+    return [
+      {
+        id: address,
+        address,
+        fromName: process.env.MAIL_FROM_NAME ?? "Gitartha",
+        // The From subdomain can't receive; send replies somewhere that can.
+        replyTo: process.env.MAIL_REPLY_TO,
+        // Deliberately low. A brand-new domain sending 40 cold emails on day
+        // one is how it gets flagged. Raise it only after warmup.
+        dailyCap: Number(process.env.MAIL_DAILY_CAP ?? 20),
+      },
+    ];
+  }
 
   const user = process.env.SMTP_USER;
   if (!user) {
