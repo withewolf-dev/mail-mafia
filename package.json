@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "^0.117.1",
     "@neondatabase/serverless": "^1.1.0",
     "csv-parse": "^7.0.2",
+    "csv-stringify": "^6.8.3",
     "nodemailer": "^9.0.5",
     "resend": "^6.20.0",
     "zod": "^4.4.3"
