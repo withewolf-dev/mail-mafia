@@ -32,3 +32,10 @@ ai-overviews/
 .DS_Store
 .vscode/
 .idea/
+
+# installed agent skills — reinstall with `npx skills add`, the lockfile pins them
+.agents/
+
+# per-machine Claude Code state: local permission grants and session checkpoints
+.claude/settings.local.json
+.claude/RESUME.md
