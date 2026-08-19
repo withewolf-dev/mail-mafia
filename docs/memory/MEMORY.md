@@ -1,0 +1,18 @@
+- [mail-mafia project](mail-mafia-project.md) — agentic email system; classifier + sender built in TypeScript, port off n8n underway
+- [Stack decision](mail-mafia-stack-decision.md) — plain TS + Anthropic SDK; Mastra, AI SDK, Agent SDK, Managed Agents all evaluated and rejected
+- [Sending identity](mail-mafia-sending-identity.md) — armstrongco.ai is a send-as alias on station91.in; Workspace can't make app passwords
+- [Scraping and context](mail-mafia-scraping.md) — how openers get their material; next step is a Firecrawl agent
+- [Email state machine model](email-state-machine-model.md) — an email is an edge, not a node; name the transition or don't send it
+- [Armstrong outbound engine](armstrong-outbound-engine.md) — AI-search visibility pitch, local high-ticket ICP, and the two n8n workflows
+- [Cold email hard rules](cold-email-hard-rules.md) — domain separation, code-enforced confidence floor, n8n's ~200/run ceiling
+- [GitHub SSH setup](github-ssh-setup.md) — repo is withewolf-dev/mail-mafia via the github-ozer alias; no gh CLI
+- [DB output preferences](db-output-preferences.md) — show every column when printing Neon rows, never a hand-picked subset
+- [Villages Florida wording](villages-florida-wording.md) — write "The Villages, Florida" with the state in outreach copy
+- [No em dashes in outreach](no-em-dashes-outreach.md) — plain hyphens only in subjects and bodies; rule codified in skeleton.md
+- [Email recovery fallbacks](email-recovery-fallbacks.md) — when no email: published business inbox, naming pattern, state registry, verify API; skip SMTP probing on M365
+- [Email body format](email-body-format.md) — plain-text rules: colon result block (no arrows), no hard wraps, blank line between entries; enforced in composer + skeleton + reflow
+- [Reflow, not write-emails](reflow-not-write-emails.md) — fix formatting with reflow-drafts (instant, content-safe); write-emails re-researches and overwrites
+- [Curiosity email format](curiosity-email-format.md) — research-only format: earned credit, "that made me curious", the client's question verbatim, then the free-audit offer; no probes needed
+- [CSV outreach run](csv-outreach-run.md) — the 2026-08-19 campaign: 260 sent, state in the CSV not Neon, send-csv.ts resumes on send_id
+- [Subagent fan-out](subagent-fanout-pattern.md) — how 13 Claude Code agents drafted 239 emails with no API credits; batch files, a shared spec, waves of 4
+- [CSV data quality](csv-data-quality.md) — ~15-20% of harvested rows are wrong; the junk email patterns to blocklist, and why own-domain sales@ is fine
