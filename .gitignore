@@ -39,3 +39,5 @@ ai-overviews/
 # per-machine Claude Code state: local permission grants and session checkpoints
 .claude/settings.local.json
 .claude/RESUME.md
+# symlinks into .agents/, recreated by the same install
+.claude/skills/
