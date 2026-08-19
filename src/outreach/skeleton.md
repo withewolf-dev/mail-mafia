@@ -101,8 +101,6 @@ local would say them** — `Gameday Men's Health`, not `Gameday Men's Health –
 - One entry per service: `Service: rivals. Not you.` No arrows, no padding. A
   blank line separates each entry so they stay distinct when a phone wraps them.
 - Only names the probe actually returned. Never a plausible-sounding local business.
-- Never a name that is also in your prospect list — you'd be telling one client
-  their neighbour is winning.
 - `Not you.` repeats verbatim on every entry. The repetition is the device; vary
   it and the drumbeat dies.
 

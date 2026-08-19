@@ -20,7 +20,6 @@ import { composeEmail, greetingFor } from "../outreach/compose.js";
 import { findMarketStats } from "../outreach/market.js";
 import { pickProcedures, readServiceMenu } from "../outreach/procedures.js";
 import { probeCategory, probeProcedure, type ProbeResult } from "../outreach/probe.js";
-import { stripOwnProspects } from "../outreach/rivals.js";
 import { listSites } from "../outreach/store.js";
 
 const args = process.argv.slice(2);
@@ -61,11 +60,6 @@ const rows = (
 ) as unknown as Row[];
 
 const crawled = new Set(await listSites());
-
-// Every business we are also pitching. A probe answers honestly, and the honest
-// answer often names the prospect two rows down this same list.
-const ourNames = ((await db()`select name_key from prospects`) as unknown as { name_key: string }[])
-  .map((r) => r.name_key);
 
 for (const row of rows) {
   console.log(`\n${"=".repeat(70)}\n#${row.id}  ${row.name}  (${row.domain})`);
@@ -108,16 +102,6 @@ for (const row of rows) {
       `    ${category.namedUs ? "NAMED" : "not named"}  ${category.label} (broad)` +
         `  -> ${category.competitors.slice(0, 3).join(", ") || "(none)"}`,
     );
-
-    // Strip our own prospects out of every competitor list before anything is
-    // written, then drop probes left with nothing to show.
-    for (const probe of [...procedureProbes, category]) {
-      const { kept, removed } = stripOwnProspects(probe.competitors, ourNames);
-      if (removed.length) {
-        console.log(`    (dropped own prospect(s) from "${probe.label}": ${removed.join(", ")})`);
-      }
-      probe.competitors = kept;
-    }
 
     const misses = procedureProbes.filter((p) => !p.namedUs && p.competitors.length);
     // The skeleton's own send-nothing rule: fewer than two misses and the

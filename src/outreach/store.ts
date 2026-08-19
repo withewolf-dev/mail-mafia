@@ -50,6 +50,21 @@ export async function savePages(domain: string, pages: SourcePage[]): Promise<st
   return dir;
 }
 
+/**
+ * Drop unpaired UTF-16 surrogates.
+ *
+ * A half-emoji left behind by a scraped page is not valid UTF-8, so JSON.stringify
+ * emits a lone surrogate and the Anthropic API rejects the whole request body with
+ * `400 no low surrogate in string`. Goldfingers Aesthetics failed exactly this way.
+ * The character is already meaningless on its own, so dropping it loses nothing.
+ */
+export function stripLoneSurrogates(text: string): string {
+  return text.replace(
+    /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,
+    "",
+  );
+}
+
 export async function loadPages(domain: string): Promise<SourcePage[]> {
   const dir = dirFor(domain);
   if (!existsSync(dir)) return [];
@@ -61,7 +76,11 @@ export async function loadPages(domain: string): Promise<SourcePage[]> {
       const url = raw.match(/^<!-- (.*?) -->/)?.[1] ?? "";
       const title = raw.match(/^# (.*)$/m)?.[1] ?? "";
       const text = raw.replace(/^<!-- .*? -->\n# .*\n\n/, "").trimEnd();
-      return { url, title, text };
+      return {
+        url,
+        title: stripLoneSurrogates(title),
+        text: stripLoneSurrogates(text),
+      };
     }),
   );
 }

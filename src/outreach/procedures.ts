@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { requireEnv } from "../env.js";
-import { loadPages } from "./store.js";
+import { loadPages, stripLoneSurrogates } from "./store.js";
 
 const MODEL = "claude-sonnet-5";
 
@@ -87,9 +87,12 @@ export async function readServiceMenu(domain: string): Promise<ServiceMenu> {
   const pages = await loadPages(domain);
   if (!pages.length) throw new Error(`No stored pages for ${domain}. Run crawl-batch first.`);
 
+  // Slicing at a fixed character count can cut an emoji's surrogate pair in
+  // half, and a lone surrogate makes the JSON request body invalid — the API
+  // rejects it with `no low surrogate in string`. Sanitise after the cut.
   const corpus = pages
     .slice(0, MAX_PAGES)
-    .map((page) => `--- ${page.url}\n${page.text.slice(0, PER_PAGE_CHARS)}`);
+    .map((page) => `--- ${page.url}\n${stripLoneSurrogates(page.text.slice(0, PER_PAGE_CHARS))}`);
 
   const response = await getClient().messages.parse({
     model: MODEL,

@@ -1,7 +1,7 @@
 /**
  * Crawl every prospect that still needs pages, so the drafter has material.
  *
- *   npx tsx src/cli/crawl-batch.ts               # everything eligible, 10 pages each
+ *   npx tsx src/cli/crawl-batch.ts               # everything eligible, 5 pages each
  *   npx tsx src/cli/crawl-batch.ts --limit 25    # deeper crawl per site
  *   npx tsx src/cli/crawl-batch.ts --only 4 9    # specific prospects
  *
@@ -16,7 +16,10 @@ import { recordRemark, remarkFor } from "../outreach/remarks.js";
 
 const args = process.argv.slice(2);
 const limitArg = args.indexOf("--limit");
-const perSite = limitArg >= 0 ? Number(args[limitArg + 1]) : 10;
+// Five pages is the working default: enough for a service menu (most sites put
+// it on the homepage and a services page) while stretching a Firecrawl balance
+// roughly twice as far. Raise it with --limit for a site worth a deeper read.
+const perSite = limitArg >= 0 ? Number(args[limitArg + 1]) : 5;
 const onlyArg = args.indexOf("--only");
 const onlyIds =
   onlyArg >= 0 ? args.slice(onlyArg + 1).filter((a) => /^\d+$/.test(a)).map(Number) : [];

@@ -103,7 +103,7 @@ export async function startCrawl(website: string, options: CrawlOptions = {}): P
       // twenty pages and one on a site with no sitemap.
       sitemap: "include",
       crawlEntireDomain: options.entireDomain ?? false,
-      limit: options.limit ?? 10,
+      limit: options.limit ?? 5,
       ...(options.includePaths?.length
         ? { includePaths: options.includePaths }
         : { excludePaths: options.excludePaths ?? DEFAULT_EXCLUDE_PATHS }),
